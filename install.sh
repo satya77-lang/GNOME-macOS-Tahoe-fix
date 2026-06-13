@@ -31,6 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GTK_DIR="$SCRIPT_DIR/gtk"
 THEME_DIR="$HOME/.themes"
 GTK4_CONFIG_DIR="$HOME/.config/gtk-4.0"
+GTK3_CONFIG_DIR="$HOME/.config/gtk-3.0"
 DOWNLOADS_DIR="$(xdg-user-dir DOWNLOAD 2>/dev/null || echo "$HOME/Downloads")"
 TMP_DIR="$(mktemp -d -t tahoe-installer.XXXXXXXXXX)"
 APP_LAUNCHER="kayozxo/ulauncher-liquid-glass"
@@ -358,6 +359,32 @@ install_libadwaita_override() {
     cp -a \"$candidate/\"* \"$GTK4_CONFIG_DIR/\"
   "
   gum_or_echo "✅ Installed libadwaita override from $candidate"
+
+  # --- Fix: Copy gtk-3.0 dependencies required by the gtk-4.0 CSS imports ---
+  # The gtk-4.0 CSS files contain '@import ../gtk-3.0/libadwaita.css' which resolves
+  # to ~/.config/gtk-3.0/ at runtime. We must populate that directory.
+  local gtk3_source="${candidate%/gtk-4.0}/gtk-3.0"
+  if [ -d "$gtk3_source" ]; then
+    gum_spin_run "Installing gtk-3.0 dependencies to $GTK3_CONFIG_DIR..." "
+      set -e
+      mkdir -p \"$GTK3_CONFIG_DIR\"
+      # Copy libadwaita CSS files
+      if [ -f \"$gtk3_source/libadwaita.css\" ]; then
+        cp -a \"$gtk3_source/libadwaita.css\" \"$GTK3_CONFIG_DIR/\"
+      fi
+      if [ -f \"$gtk3_source/libadwaita-tweaks.css\" ]; then
+        cp -a \"$gtk3_source/libadwaita-tweaks.css\" \"$GTK3_CONFIG_DIR/\"
+      fi
+      # Copy assets directory (checkboxes, radio buttons, sliders, etc.)
+      if [ -d \"$gtk3_source/assets\" ]; then
+        rm -rf \"$GTK3_CONFIG_DIR/assets\" 2>/dev/null || true
+        cp -a \"$gtk3_source/assets\" \"$GTK3_CONFIG_DIR/\"
+      fi
+    "
+    gum_or_echo "✅ Installed gtk-3.0 dependencies (libadwaita CSS + assets)"
+  else
+    gum_or_echo "${YELLOW}⚠️  gtk-3.0 source not found at $gtk3_source — CSS imports may be broken${NC}"
+  fi
 }
 
 install_ulauncher_theme() {
@@ -593,6 +620,13 @@ uninstall_all() {
     if [ -f "'"$GTK4_CONFIG_DIR"'/gtk-Dark.css" ]; then rm -f "'"$GTK4_CONFIG_DIR"'/gtk-Dark.css"; fi
     if [ -d "'"$GTK4_CONFIG_DIR"'/assets" ]; then rm -rf "'"$GTK4_CONFIG_DIR"'/assets"; fi
     if [ -d "'"$GTK4_CONFIG_DIR"'/windows-assets" ]; then rm -rf "'"$GTK4_CONFIG_DIR"'/windows-assets"; fi
+  '
+
+  gum_spin_run "Cleaning $GTK3_CONFIG_DIR (libadwaita dependencies)..." '
+    set -e
+    if [ -f "'"$GTK3_CONFIG_DIR"'/libadwaita.css" ]; then rm -f "'"$GTK3_CONFIG_DIR"'/libadwaita.css"; fi
+    if [ -f "'"$GTK3_CONFIG_DIR"'/libadwaita-tweaks.css" ]; then rm -f "'"$GTK3_CONFIG_DIR"'/libadwaita-tweaks.css"; fi
+    if [ -d "'"$GTK3_CONFIG_DIR"'/assets" ]; then rm -rf "'"$GTK3_CONFIG_DIR"'/assets"; fi
   '
 
   gum_or_echo "✅ Uninstallation complete."
